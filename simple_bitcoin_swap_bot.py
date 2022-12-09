@@ -92,17 +92,19 @@ show_current_balances(initial_btc_balance, initial_usd_balance)
 # show the main menu
 show_main_menu()
 # read the user's input
+
+
+
 option = input()
 # handle the user's input
 if option == "1":
     # Set the trading strategy parameters
-    buy_price_threshold = input("buy_price_threshold: ")
-    sell_price_threshold = input("sell_price_threshold: ")
-    stop_loss = input("stop_loss: ")
-    take_profit_percent = input("take_profit_percent: ")
-    interval = input("interval: ")
-    max_trade_size = input("trade_size:")
-
+    buy_price_threshold = float(input("buy_price_threshold: "))
+    sell_price_threshold = float(input("sell_price_threshold: "))
+    stop_loss = float(input("stop_loss: "))
+    take_profit_percent = float(input("take_profit_percent: "))
+    interval = int(input("interval: "))
+    max_trade_size = float(input("trade_size:"))
     # Check if the interval is not an empty string
     if interval:
         # Convert interval to an integer
@@ -129,7 +131,7 @@ if option == "1":
         take_profit_percent = float(take_profit_percent)
 
     show_trading_parameters(buy_price_threshold, sell_price_threshold,
-                            stop_loss, take_profit_percent, interval)
+                            stop_loss, take_profit_percent, interval, max_trade_size)
 elif option == "2":
     # Show the current strategy parameters
     show_trading_parameters(buy_price_threshold, sell_price_threshold,
@@ -213,23 +215,53 @@ def calculate_moving_average(prices, period):
     return moving_avg
 
 
+def calculate_ema(prices, period):
+    # Check if the prices list has at least one element
+    if len(prices) > 0:
+        # Initialize the EMA with the first element in the prices list
+        ema = prices[0]
+
+        # Loop through the remaining elements in the prices list
+        for i in range(1, len(prices)):
+            # Calculate the EMA using the formula: EMA = (current_number * k) + (previous_EMA * (1 - k))
+            # where k = 2 / (period + 1)
+            k = 2 / (period + 1)
+            ema = (prices[i] * k) + (ema * (1 - k))
+
+        # Return the calculated EMA
+        return ema
+
+    # If the prices list is empty, return 0
+    else:
+        return 0
+
+
 # calculate the volatility index
 def calculate_volatility_index(prices):
     # calculate the volatility index for a given time period
     # prices is a list of prices for each time interval
     # a higher value indicates higher volatility and a lower value indicates lower volatility.
 
+    # normalize the input prices
+    min_price = min(prices)
+    max_price = max(prices)
+    range_of_prices = max_price - min_price
+    normalized_prices = [(price - min_price) / range_of_prices for price in prices]
+
     # initialize the variables
     sum_of_squared_errors = 0
-    mean = sum(prices) / len(prices)
+    mean = sum(normalized_prices) / len(normalized_prices)
 
     # loop through the prices and calculate the sum of squared errors
-    for price in prices:
+    for price in normalized_prices:
         squared_error = (price - mean)**2
         sum_of_squared_errors += squared_error
 
     # calculate the volatility index
-    volatility_index = (sum_of_squared_errors / len(prices))**0.5
+    volatility_index = (sum_of_squared_errors / len(normalized_prices))**0.5
+
+    # multiply the volatility index by 100 to convert it to a range of 0 to 100
+    volatility_index *= 100
 
     return volatility_index
 
@@ -281,15 +313,53 @@ def relative_strength_index(prices):
     total_gain = sum(up_changes)
     total_loss = sum(down_changes)
 
-    # Calculate the relative strength
-    if total_loss == 0:
-        relative_strength = 0
+
+
+# Define a function that takes a list of prices as input and returns the areas of support and resistance
+def find_s_and_r(prices):
+    # Calculate the moving average of the prices using a window size of 10
+    sr_moving_avg = np.convolve(prices, np.ones((20,))/20, mode='valid')
+
+    # Initialize lists to hold the support and resistance levels
+    support = []
+    resistance = []
+
+    # Loop through the moving average and append the support and resistance levels to the appropriate list
+    for i in range(1, len(sr_moving_avg)-1):
+        if sr_moving_avg[i] < sr_moving_avg[i-1] and sr_moving_avg[i] < sr_moving_avg[i+1]:
+            support.append(sr_moving_avg[i])
+        elif sr_moving_avg[i] > sr_moving_avg[i-1] and sr_moving_avg[i] > sr_moving_avg[i+1]:
+            resistance.append(sr_moving_avg[i])
+
+    return support, resistance
+
+def find_trend(prices):
+
+    # Call the find_s_and_r function to calculate the support and resistance levels
+    support, resistance = find_s_and_r(prices)
+
+    # Check if the prices and resistance lists have at least one element
+    if len(prices) > 0 and len(resistance) > 0 and len(support):
+        # Check if the current price is above the resistance level
+        if prices[-1] > resistance[-1]:
+            return "Trending up"
+
+        # Check if the current price is below the support level
+        elif prices[-1] < support[-1]:
+            return "Trending down"
+
+        # If the current price is not above the resistance level or below the support level, it is not trending in a clear direction
+        else:
+            return "Not trending"
+
+    # If the prices or resistance list is empty, return "Not trending"
     else:
-        relative_strength = total_gain / total_loss
+        return "Not trending"
+
+
+
 
 # main loop for the trading bot
-
-
 def main():
 
     # set the initial values for the user's accounts
@@ -302,6 +372,7 @@ def main():
     profit = 0
     profit_percentage = 0
     moving_average = 0
+    ema = 0
     volatility = 0
     upper_bound = 0
     lower_bound = 0
@@ -310,10 +381,13 @@ def main():
     usd_balance = initial_usd_balance
     initial_net_worth = 0
     current_net_worth = 0
-
+    
 
     # runs loop indefinitely
     while True:
+
+        # Calculate the support and resistance levels
+
 
         time.sleep(interval)  # wait before making the next request
         price = get_price("USD")  # get the current price in USD
@@ -322,18 +396,21 @@ def main():
         prices.append(price)
 
         # if there are enough prices in the list, calculate the moving average
-        if len(prices) >= 20:
+        if len(prices) >= 10:
             moving_avg = calculate_moving_average(prices, 10)
             moving_avgs.append(moving_avg)
             moving_average = moving_avg
 
+        if len(prices) >= 10:
+            ema = calculate_ema(prices, 10)
+
         # if there are enough prices in the list, calculate the volatility index
-        if len(prices) >= 20:
+        if len(prices) >= 10:
             volatility_index = calculate_volatility_index(prices)
             volatility = volatility_index
 
         # if there are enough prices in the list, calculate the upper & lower bounds of the price range
-        if len(prices) >= 20:
+        if len(prices) >= 10:
             upper_bound, lower_bound = calculate_price_range(prices, 0.01)
 
         # buy bitcoin
@@ -347,10 +424,11 @@ def main():
             latest_price = price
             btc_balance += trade_size / price
             usd_balance = usd_balance - (usd_balance * max_trade_size)
+            formatted_trade_size = "${:,.2f}".format(trade_size)
 
             # record the trade in the trade history
             record_trade(
-                {'type': side, 'amount': btc_balance, 'price': price})
+                {'type': side, 'amount': formatted_trade_size, 'price': price})
 
             # Calculate new buy and sell price thresholds after trade
             calculate_price_thresholds(
@@ -383,10 +461,10 @@ def main():
             call_count += 1
             latest_price = price
             usd_balance += trade_size * price
-            btc_balance = btc_balance - (btc_balance * max_trade_size) 
+            btc_balance = btc_balance - (btc_balance * max_trade_size)
             # record the trade in the trade history
             record_trade(
-                {'type': 'sell', 'amount': btc_balance, 'price': price})
+                {'type': side, 'amount': trade_size, 'price': price})
 
             # Calculate new buy and sell price thresholds after trade
             calculate_price_thresholds(
@@ -421,7 +499,7 @@ def main():
             btc_balance = 0
             # record the trade in the trade history
             record_trade(
-                {'type': 'sell', 'amount': btc_balance, 'price': price})
+                {'type': side, 'amount': btc_balance, 'price': price})
             # Calculate new buy and sell price thresholds after trade
             calculate_price_thresholds(
                 latest_price)
@@ -444,11 +522,16 @@ def main():
         # analyse the market and await making a trade decision (the bot will spend most time doing this)
         else:
             # hold the current position
+            # Calculate the support and resistance levels
+            support, resistance = find_s_and_r(prices)       
             # calculate profit or loss
-            profit = (usd_balance - initial_usd_balance) + ((btc_balance - initial_btc_balance) * price)
-            initial_net_worth = (initial_btc_balance * price) + initial_usd_balance 
+            profit = (usd_balance - initial_usd_balance) + \
+                ((btc_balance - initial_btc_balance) * price)
+            initial_net_worth = (initial_btc_balance *
+                                 price) + initial_usd_balance
             current_net_worth = (btc_balance * price) + usd_balance
-            profit_percentage = (current_net_worth - initial_net_worth) / initial_net_worth * 100 if initial_net_worth != 0 else 0
+            profit_percentage = (current_net_worth - initial_net_worth) / \
+                initial_net_worth * 100 if initial_net_worth != 0 else 0
             call_count += 1
             print("")
             print("----------------------------------------------------------")
@@ -467,7 +550,8 @@ def main():
             print("--- BTC balance: {:,.8f}".format(btc_balance))
             print("--- USD balance: ${:,.2f}".format(usd_balance))
             print("--- Profit: ${:,.2f}".format(profit))
-            print("--- Account growth: {:,.2f}".format(profit_percentage) + "%")
+            print(
+                "--- Account growth: {:,.2f}".format(profit_percentage) + "%")
             print("--- Trade count:", trade_count)
             print("--- Stop loss count: ", stop_loss_count)
             print("--- Take profit count: ", take_profit_count)
@@ -475,7 +559,11 @@ def main():
             print("/// INDICATORS ///")
             print("")
             print("--- Moving average: ${:,.2f}".format(moving_average))
+            print("--- Exponential moving average: ${:,.2f}".format(ema))
             print("--- Volatility: ", volatility)
+            print("--- Support: ", support)
+            print("--- Resistance: ", resistance)
+            print("--- Trend: ", find_trend(prices))
             print(
                 "--- Trading range: ${:,.2f} - ${:,.2f}".format(lower_bound, upper_bound))
             print("")
