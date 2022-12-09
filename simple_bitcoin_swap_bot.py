@@ -10,15 +10,16 @@ moving_avgs = []  # creates a list of moving averages
 trade_history = []  # create an empty list to store the trade history
 # initialize the trading strategy parameters
 is_trading = True  # allow the bot to execute trades
-buy_price_threshold = 17560  # initial buy target
-sell_price_threshold = 17000  # initial sell target
+buy_price_threshold = 17176  # initial buy target
+sell_price_threshold = 17177  # initial sell target
 stop_loss = 0.99  # sell when the falls into a loss
 take_profit_percent = 1.01  # sell when the price rises in profit
 interval = 5  # time in seconds between each loop
 # initialize the balances
 initial_btc_balance = 1
-initial_usd_balance = 0
+initial_usd_balance = 17176
 initial_net_worth = 0
+max_trade_size = 0.1
 
 
 # show the welcome message
@@ -61,7 +62,7 @@ def show_trading_history(history):
 
 
 # show the current trading parameters
-def show_trading_parameters(buy_price_threshold, sell_price_threshold, stop_loss, take_profit_percent, interval):
+def show_trading_parameters(buy_price_threshold, sell_price_threshold, stop_loss, take_profit_percent, interval, max_trade_size):
     print("-------------------------------------")
     print("| Current Strategy Parameters       |")
     print("-------------------------------------")
@@ -70,6 +71,7 @@ def show_trading_parameters(buy_price_threshold, sell_price_threshold, stop_loss
     print("stop_loss: ", stop_loss)
     print("take_profit_percent: ", take_profit_percent)
     print("interval: ", interval)
+    print("Max Trade Size: ", max_trade_size)
 
 
 # show the trading in progress
@@ -131,7 +133,7 @@ if option == "1":
 elif option == "2":
     # Show the current strategy parameters
     show_trading_parameters(buy_price_threshold, sell_price_threshold,
-                            stop_loss, take_profit_percent, interval)
+                            stop_loss, take_profit_percent, interval, max_trade_size)
 elif option == "3":
     # start/stop trading
     if is_trading:
@@ -336,14 +338,15 @@ def main():
 
         # buy bitcoin
         if price < buy_price_threshold and usd_balance != 0 and call_count > 5:
+            trade_size = usd_balance * max_trade_size
             # Define the arguments to pass to the order_btc function
             side = "buy"
             # Add the amount of BTC to the BTC balance
             trade_count += 1
             call_count += 1
             latest_price = price
-            btc_balance += usd_balance / price
-            usd_balance = 0
+            btc_balance += trade_size / price
+            usd_balance = usd_balance - (usd_balance * max_trade_size)
 
             # record the trade in the trade history
             record_trade(
@@ -374,12 +377,13 @@ def main():
         # sell bitcoin at desired target price
         if price > sell_price_threshold and btc_balance != 0 and call_count > 5:
             # sell all of the bitcoin for USD
+            trade_size = btc_balance * max_trade_size
             side = "sell"
             trade_count += 1
             call_count += 1
             latest_price = price
-            usd_balance += btc_balance * price
-            btc_balance = 0
+            usd_balance += trade_size * price
+            btc_balance = btc_balance - (btc_balance * max_trade_size) 
             # record the trade in the trade history
             record_trade(
                 {'type': 'sell', 'amount': btc_balance, 'price': price})
@@ -462,9 +466,9 @@ def main():
             print("")
             print("--- BTC balance: {:,.8f}".format(btc_balance))
             print("--- USD balance: ${:,.2f}".format(usd_balance))
-            print("--- Profit ($): {:,.2f}".format(profit))
-            print("--- Account growth (%): {:,.2f}".format(profit_percentage))
-            print("--- Trade count: ", trade_count)
+            print("--- Profit: ${:,.2f}".format(profit))
+            print("--- Account growth: {:,.2f}".format(profit_percentage) + "%")
+            print("--- Trade count:", trade_count)
             print("--- Stop loss count: ", stop_loss_count)
             print("--- Take profit count: ", take_profit_count)
             print("")
