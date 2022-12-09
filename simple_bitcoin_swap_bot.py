@@ -6,20 +6,19 @@ import numpy as np
 
 # create lists to record trade and price data
 prices = []  # create empty lists to store the prices and moving averages
-moving_avgs = []  # create an empty list to store the trade history
-trade_history = []  # create a list of RSI values
-rsi_values = []
+moving_avgs = []  # creates a list of moving averages
+trade_history = []  # create an empty list to store the trade history
 # initialize the trading strategy parameters
-is_trading = True
-buy_price_threshold = 17560  # buy when the price falls below this threshold
-sell_price_threshold = 17890  # sell when the price rises above this threshold
+is_trading = True  # allow the bot to execute trades
+buy_price_threshold = 17560  # initial buy target
+sell_price_threshold = 17000  # initial sell target
 stop_loss = 0.99  # sell when the falls into a loss
 take_profit_percent = 1.01  # sell when the price rises in profit
 interval = 5  # time in seconds between each loop
-max_trade_size = 100
 # initialize the balances
-initial_btc_balance = 0
-initial_usd_balance = 1000
+initial_btc_balance = 1
+initial_usd_balance = 0
+initial_net_worth = 0
 
 
 # show the welcome message
@@ -62,7 +61,7 @@ def show_trading_history(history):
 
 
 # show the current trading parameters
-def show_trading_parameters(buy_price_threshold, sell_price_threshold, stop_loss, take_profit_percent, interval, max_trade_size):
+def show_trading_parameters(buy_price_threshold, sell_price_threshold, stop_loss, take_profit_percent, interval):
     print("-------------------------------------")
     print("| Current Strategy Parameters       |")
     print("-------------------------------------")
@@ -71,7 +70,6 @@ def show_trading_parameters(buy_price_threshold, sell_price_threshold, stop_loss
     print("stop_loss: ", stop_loss)
     print("take_profit_percent: ", take_profit_percent)
     print("interval: ", interval)
-    print("trade_size:", max_trade_size)
 
 
 # show the trading in progress
@@ -129,11 +127,11 @@ if option == "1":
         take_profit_percent = float(take_profit_percent)
 
     show_trading_parameters(buy_price_threshold, sell_price_threshold,
-                            stop_loss, take_profit_percent, interval, max_trade_size)
+                            stop_loss, take_profit_percent, interval)
 elif option == "2":
     # Show the current strategy parameters
     show_trading_parameters(buy_price_threshold, sell_price_threshold,
-                            stop_loss, take_profit_percent, interval, max_trade_size)
+                            stop_loss, take_profit_percent, interval)
 elif option == "3":
     # start/stop trading
     if is_trading:
@@ -147,7 +145,7 @@ elif option == "3":
         print("Trading started.")
 elif option == "4":
     # Show current balances
-    show_current_balances(btc_balance, usd_balance)
+    show_current_balances(initial_btc_balance, initial_usd_balance)
 elif option == "5":
 
     # Initialize the trading history
@@ -287,13 +285,9 @@ def relative_strength_index(prices):
     else:
         relative_strength = total_gain / total_loss
 
-    # Calculate the relative strength index
-    rsi = 100 - (100 / (1 + relative_strength))
-
-    return rsi
-
-
 # main loop for the trading bot
+
+
 def main():
 
     # set the initial values for the user's accounts
@@ -309,9 +303,11 @@ def main():
     volatility = 0
     upper_bound = 0
     lower_bound = 0
-    rsi = 0
+    price = 0
     btc_balance = initial_btc_balance
     usd_balance = initial_usd_balance
+    initial_net_worth = 0
+    current_net_worth = 0
 
 
     # runs loop indefinitely
@@ -337,11 +333,6 @@ def main():
         # if there are enough prices in the list, calculate the upper & lower bounds of the price range
         if len(prices) >= 20:
             upper_bound, lower_bound = calculate_price_range(prices, 0.01)
-
-        # calculate the RSI for each set of prices
-            rsi = []
-            for i in range(len(prices)):
-                rsi.append(relative_strength_index(prices[i:]))
 
         # buy bitcoin
         if price < buy_price_threshold and usd_balance != 0 and call_count > 5:
@@ -381,7 +372,7 @@ def main():
             print("")
 
         # sell bitcoin at desired target price
-        if price > sell_price_threshold and btc_balance != 0:
+        if price > sell_price_threshold and btc_balance != 0 and call_count > 5:
             # sell all of the bitcoin for USD
             side = "sell"
             trade_count += 1
@@ -415,7 +406,7 @@ def main():
             print("")
 
         # stop loss
-        if price < starting_price * (1 - stop_loss):
+        if price < starting_price * (1 - stop_loss) and call_count > 5:
             # sell all of the bitcoin for USD
             side = "sell"
             trade_count += 1
@@ -446,15 +437,14 @@ def main():
             print("USD balance: ${:,.2f}".format(usd_balance))
             print("")
 
-    
         # analyse the market and await making a trade decision (the bot will spend most time doing this)
         else:
             # hold the current position
             # calculate profit or loss
-            profit = usd_balance-initial_usd_balance + (btc_balance * price)
-            if initial_usd_balance != 0:
-                profit_percentage = ((profit / initial_usd_balance)) * 100
-            else: profit_percentage =  (btc_balance * price) / (initial_btc_balance * price)
+            profit = (usd_balance - initial_usd_balance) + ((btc_balance - initial_btc_balance) * price)
+            initial_net_worth = (initial_btc_balance * price) + initial_usd_balance 
+            current_net_worth = (btc_balance * price) + usd_balance
+            profit_percentage = (current_net_worth - initial_net_worth) / initial_net_worth * 100 if initial_net_worth != 0 else 0
             call_count += 1
             print("")
             print("----------------------------------------------------------")
@@ -465,14 +455,15 @@ def main():
             print("")
             print("--- BTC price: ${:,.2f}".format(price))
             print("--- Target buy price: ${:,.2f}".format(buy_price_threshold))
-            print("--- Target sell price: ${:,.2f}".format(sell_price_threshold))
+            print(
+                "--- Target sell price: ${:,.2f}".format(sell_price_threshold))
             print("")
             print("/// TRADE STATS ///")
-            print("")            
+            print("")
             print("--- BTC balance: {:,.8f}".format(btc_balance))
             print("--- USD balance: ${:,.2f}".format(usd_balance))
-            print("--- Profit: ${:,.2f}".format(profit))
-            print("--- Account growth: %{:,.2f}".format(profit_percentage))
+            print("--- Profit ($): {:,.2f}".format(profit))
+            print("--- Account growth (%): {:,.2f}".format(profit_percentage))
             print("--- Trade count: ", trade_count)
             print("--- Stop loss count: ", stop_loss_count)
             print("--- Take profit count: ", take_profit_count)
@@ -481,9 +472,10 @@ def main():
             print("")
             print("--- Moving average: ${:,.2f}".format(moving_average))
             print("--- Volatility: ", volatility)
-            print("--- Trading range: ${:,.2f} - ${:,.2f}".format(lower_bound, upper_bound))
+            print(
+                "--- Trading range: ${:,.2f} - ${:,.2f}".format(lower_bound, upper_bound))
             print("")
-          # print("--- Trade history: ", trade_history)
+            print("--- Trade history: ", trade_history)
           # print("Time log:", now.strftime("%Y-%m-%d %H:%M:%S")) (recording the star of the program, not the record instances)
             print("")
 
