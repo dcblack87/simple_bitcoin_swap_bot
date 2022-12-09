@@ -450,7 +450,7 @@ def main():
         # analyse the market and await making a trade decision (the bot will spend most time doing this)
         else:
             # hold the current position
-            # calculate profut or loss
+            # calculate profit or loss
             profit = usd_balance-initial_usd_balance + (btc_balance * price)
             if initial_usd_balance != 0:
                 profit_percentage = ((profit / initial_usd_balance)) * 100
